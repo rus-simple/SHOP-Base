@@ -1,0 +1,254 @@
+import java.util.*;
+import java.util.Objects;
+import java.util.HashSet;
+import java.util.Set;
+
+public class Main {
+    public static void main(String[] args) {
+        ConsoleService consoleService = new ConsoleService();
+        consoleService.start();
+    }
+}
+class ConsoleService {
+    private Shop shop;
+    private Human human;
+
+    public void start() {
+        Scanner scanner = new Scanner(System.in);
+
+        System.out.println("Задайте имя и стартовый капитал магазина: ");
+        String shopInput = scanner.nextLine();
+        String[] shopDetails = shopInput.split(" ");
+        String shopName = shopDetails[0];
+        double shopMoney = Double.parseDouble(shopDetails[1]);
+
+        shop = new Shop(shopName, shopMoney);
+
+        System.out.print("Укажите количество товаров: ");
+        int numOfProducts = scanner.nextInt();
+        scanner.nextLine(); // clear buffer
+
+        for (int i = 0; i < numOfProducts; i++) {
+            System.out.printf("Заполните данные для товара №%d (название товара, его стоимость и количество в наличии через пробел):\n", i + 1);
+            String productData = scanner.nextLine();
+            String[] productDetails = productData.split(" ");
+
+            String productName = productDetails[0];
+            double productPrice = Double.parseDouble(productDetails[1]);
+            int productQuantity = Integer.parseInt(productDetails[2]);
+
+            Product product = new Product(productName, productPrice);
+            shop.putProduct(product, productQuantity);
+        }
+
+        System.out.println("Предложите данные о человеке - имя, фамилия, и количество денежных средств: ");
+        String humanInput = scanner.nextLine();
+        String[] humanDetails = humanInput.split(" ");
+        String firstName = humanDetails[0];
+        String lastName = humanDetails[1];
+        double money = Double.parseDouble(humanDetails[2]);
+
+        human = new Human(firstName, lastName, money);
+
+        while (true) {
+            System.out.println("\nМеню:");
+            System.out.println("1. Посмотреть список товаров");
+            System.out.println("2. Выход");
+
+            int choice = scanner.nextInt();
+            scanner.nextLine(); // clear buffer
+
+            switch (choice) {
+                case 1:
+                    List<Product> allProducts = shop.printAndGetAllProductsWithCount();
+                    System.out.print("Выберите товар для покупки (номер): ");
+                    int productIndex = scanner.nextInt() - 1;
+                    scanner.nextLine(); // clear buffer
+                    if (productIndex >= 0 && productIndex < allProducts.size()) {
+                        Product selectedProduct = allProducts.get(productIndex);
+                        human.buyProduct(selectedProduct, shop);
+                    } else {
+                        System.out.println("Некорректный индекс товара.");
+                    }
+                    break;
+                case 2:
+                    System.out.println("Завершение программы...");
+                    return;
+                default:
+                    System.out.println("Неправильный выбор. Попробуйте снова.");
+            }
+        }
+    }
+}
+class Product implements Comparable<Product> {
+    private String productName;
+    private double price;
+
+    public Product(String productName, double price) {
+        this.productName = productName;
+        this.price = price;
+    }
+
+    public String getProductName() {
+        return productName;
+    }
+
+    public double getPrice() {
+        return price;
+    }
+
+    @Override
+    public int compareTo(Product other) {
+        return Double.compare(this.price, other.price);
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (!(o instanceof Product)) return false;
+        Product product = (Product) o;
+        return Objects.equals(getProductName(), product.getProductName());
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(getProductName());
+    }
+
+    @Override
+    public String toString() {
+        return productName + " - " + price;
+    }
+}
+
+class Shop {
+    private String name;
+    private double money;
+    private Map<Product, Integer> products;
+
+    public Shop(String name, double money) {
+        this.name = name;
+        this.money = money;
+        this.products = new TreeMap<>(Comparator.comparingDouble(Product::getPrice));
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public double getMoney() {
+        return money;
+    }
+
+    public void putProduct(Product product, int quantity) {
+        products.put(product, quantity);
+    }
+
+    public void sellProduct(Product product, Human human) throws SellProductException {
+        if (!products.containsKey(product)) {
+            throw new SellProductException("Продукт с именем " + product.getProductName() + " отсутствует в магазине.");
+        }
+
+        int availableQuantity = products.get(product);
+        if (availableQuantity <= 0) {
+            throw new SellProductException("Продукта с именем " + product.getProductName() + " нет в наличии.");
+        }
+
+        if (human.getMoney() < product.getPrice()) {
+            throw new SellProductException("Уважаемый " + human.getFirstName() + " " + human.getLastName() +
+                    ", для покупки товара недостаточно средств.");
+        }
+
+        double nds = calculateNds(product.getPrice());
+        money += product.getPrice() + nds;
+        products.computeIfPresent(product, (key, qty) -> Math.max(qty - 1, 0)); // уменьшаем количество товара
+    }
+
+    private double calculateNds(double price) {
+        return price * 0.13;
+    }
+
+    public List<Product> printAndGetAllProductsWithCount() {
+        List<Product> sortedProducts = new ArrayList<>(products.entrySet().stream()
+                .filter(entry -> entry.getValue() > 0)
+                .map(Map.Entry::getKey)
+                .toList());
+        Collections.sort(sortedProducts);
+
+        for (int i = 0; i < sortedProducts.size(); i++) {
+            Product product = sortedProducts.get(i);
+            int quantity = products.get(product);
+            System.out.println((i + 1) + ". " + product.getProductName() + " - " + quantity + " - " + product.getPrice());
+        }
+
+        return sortedProducts;
+    }
+}
+
+class Human implements Buyer {
+    private String firstName;
+    private String lastName;
+    private double money;
+    private Set<Product> products;
+
+    public Human(String firstName, String lastName, double money) {
+        this.firstName = firstName;
+        this.lastName = lastName;
+        this.money = money;
+        this.products = new HashSet<>();
+    }
+
+    public String getFirstName() {
+        return firstName;
+    }
+
+    public void setFirstName(String firstName) {
+        this.firstName = firstName;
+    }
+
+    public String getLastName() {
+        return lastName;
+    }
+
+    public void setLastName(String lastName) {
+        this.lastName = lastName;
+    }
+
+    public double getMoney() {
+        return money;
+    }
+
+    public void setMoney(double money) {
+        this.money = money;
+    }
+
+    public Set<Product> getProducts() {
+        return products;
+    }
+
+    public void setProducts(Set<Product> products) {
+        this.products = products;
+    }
+
+    @Override
+    public void buyProduct(Product product, Shop shop) {
+        try {
+            shop.sellProduct(product, this);
+            money -= product.getPrice();
+            products.add(product);
+            System.out.println(firstName + ", вы успешно совершили покупку! С уважением, " + shop.getName());
+        } catch (SellProductException e) {
+            System.err.println(e.getMessage());
+        }
+    }
+}
+
+interface Buyer {
+    void buyProduct(Product product, Shop shop);
+}
+
+class SellProductException extends Exception {
+    public SellProductException(String message) {
+        super(message);
+    }
+}
